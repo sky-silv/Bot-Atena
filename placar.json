@@ -1,0 +1,18 @@
+{
+  "academicos": {
+    "nome": "GT Assuntos Acadêmicos",
+    "pontos": 0
+  },
+  "rh": {
+    "nome": "GT Recursos Humanos",
+    "pontos": 0
+  },
+  "marketing": {
+    "nome": "GT Comunicação e Marketing",
+    "pontos": 0
+  },
+  "superintendencia": {
+    "nome": "GT Superintendência",
+    "pontos": 0
+  }
+}

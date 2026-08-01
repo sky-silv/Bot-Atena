@@ -1,0 +1,5 @@
+MAIN=index.js
+MEMORY=100
+VERSION=recommended
+DISPLAY_NAME=Atena Bot
+AUTORESTART=true
