@@ -282,3 +282,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
+const express = require('express');
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+    res.send('Atena está online e funcionando!');
+});
+
+app.listen(PORT, () => {
+    console.log(`Servidor HTTP do Render rodando na porta ${PORT}`);
+});
