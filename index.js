@@ -32,10 +32,10 @@ async function getActiveLlamaModel() {
     try {
         const response = await groq.models.list();
         
-        // Filtra os modelos oficiais que contêm llama-3.3 ou llama3 no ID
+        // Busca modelos Llama 3.3, Llama 3.1 ou Llama 3 disponíveis
         const selectedModel = response.data.find(model => {
             const id = model.id.toLowerCase();
-            return id.includes('llama-3.3') || id.includes('llama3');
+            return id.includes('llama-3.3') || id.includes('llama-3.1') || id.includes('llama3');
         });
 
         if (selectedModel) {
@@ -43,11 +43,17 @@ async function getActiveLlamaModel() {
             return selectedModel.id;
         }
 
-        console.warn('[Groq] Nenhum modelo dinâmico encontrado. Usando fallback.');
-        return 'llama-3.1-8b-instant';
+        // Se nenhum modelo específico for achado pela busca, seleciona o primeiro modelo ativo retornado pela API
+        if (response.data && response.data.length > 0) {
+            console.log(`[Groq] Modelo ativo dinâmico selecionado: ${response.data[0].id}`);
+            return response.data[0].id;
+        }
+
+        // Fallback final
+        return 'llama-3.3-70b-versatile';
     } catch (error) {
         console.error('[Groq] Erro ao listar modelos:', error);
-        return 'llama-3.1-8b-instant';
+        return 'llama-3.3-70b-versatile';
     }
 }
 
