@@ -11,8 +11,45 @@ const {
 const Groq = require('groq-sdk');
 const fs = require('fs');
 const path = require('path');
+const express = require('express');
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+// --- SERVIDOR EXPRESS PARA MANTER O RENDER ON ---
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+    res.send('Atena está online e funcionando!');
+});
+
+app.listen(PORT, () => {
+    console.log(`Servidor HTTP do Render rodando na porta ${PORT}`);
+});
+
+// --- FUNÇÃO DE SELEÇÃO DINÂMICA DE MODELO GROQ ---
+async function getActiveLlamaModel() {
+    try {
+        const response = await groq.models.list();
+        
+        // Filtra os modelos oficiais que contêm llama-3.3 ou llama3 no ID
+        const selectedModel = response.data.find(model => {
+            const id = model.id.toLowerCase();
+            return id.includes('llama-3.3') || id.includes('llama3');
+        });
+
+        if (selectedModel) {
+            console.log(`[Groq] Modelo selecionado dinamicamente: ${selectedModel.id}`);
+            return selectedModel.id;
+        }
+
+        console.warn('[Groq] Nenhum modelo dinâmico encontrado. Usando fallback.');
+        return 'llama-3.1-8b-instant';
+    } catch (error) {
+        console.error('[Groq] Erro ao listar modelos:', error);
+        return 'llama-3.1-8b-instant';
+    }
+}
 
 // Arquivos de banco de dados locais
 const CAMINHO_PLACAR_GTS = path.join(__dirname, 'placar.json');
@@ -91,7 +128,8 @@ client.on(Events.MessageCreate, async (message) => {
     try {
       await message.channel.sendTyping();
 
-      // Pede para o Groq gerar uma pergunta em formato JSON válido
+      const activeModel = await getActiveLlamaModel();
+
       const promptQuiz = 
         'Gere uma pergunta de múltipla escolha inédita sobre Engenharia, Agronomia, Geociências, ABNT, legislação do Confea/Crea ou física/matemática básica. ' +
         'Retorne ESTRITAMENTE um JSON no seguinte formato, sem formatação markdown ou texto adicional:\n' +
@@ -104,12 +142,11 @@ client.on(Events.MessageCreate, async (message) => {
 
       const completion = await groq.chat.completions.create({
         messages: [{ role: 'user', content: promptQuiz }],
-        model: 'llama-3.3-70b-versatile',
+        model: activeModel,
         temperature: 0.8,
       });
 
       const rawContent = completion.choices[0]?.message?.content || '';
-      // Limpa possíveis blocos de código markdown como ```json ... ```
       const jsonString = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
       const quizItem = JSON.parse(jsonString);
 
@@ -172,7 +209,7 @@ client.on(Events.MessageCreate, async (message) => {
     const vencedor = ordenados[0][1].nome;
     const pontosVencedor = ordenados[0][1].pontos;
 
-    salvarQuizMembros({}); // Reseta o placar da semana
+    salvarQuizMembros({});
 
     return message.reply(`🎉 **FIM DA SEMANA!** 🎉\n\n🏆 O grande campeão da semana foi **${vencedor}** com **${pontosVencedor} pontos**!\n\nO ranking do Quiz foi resetado para a próxima rodada.`);
   }
@@ -219,6 +256,8 @@ client.on(Events.MessageCreate, async (message) => {
   try {
     await message.channel.sendTyping();
 
+    const activeModel = await getActiveLlamaModel();
+
     const systemInstruction = 
       "Seu nome é Atena, uma Inteligência Artificial desenvolvida pelo Crea-GO Jovem. " +
       "Seu foco principal é auxiliar estudantes, recém-formados e jovens profissionais das áreas de Engenharia, Agronomia e Geociências em Goiás e no Brasil. " +
@@ -230,7 +269,7 @@ client.on(Events.MessageCreate, async (message) => {
         { role: 'system', content: systemInstruction },
         { role: 'user', content: pergunta },
       ],
-      model: 'llama-3.3-70b-versatile',
+      model: activeModel,
       temperature: 0.7,
     });
 
@@ -282,14 +321,3 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
-const express = require('express');
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.get('/', (req, res) => {
-    res.send('Atena está online e funcionando!');
-});
-
-app.listen(PORT, () => {
-    console.log(`Servidor HTTP do Render rodando na porta ${PORT}`);
-});
