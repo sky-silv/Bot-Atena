@@ -20,7 +20,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-    res.send('Atena está online e funcionando!');
+    res.send('Arqui está online e funcionando!');
 });
 
 app.listen(PORT, () => {
@@ -32,7 +32,6 @@ async function getActiveLlamaModel() {
     try {
         const response = await groq.models.list();
         
-        // Busca modelos Llama 3.3, Llama 3.1 ou Llama 3 disponíveis
         const selectedModel = response.data.find(model => {
             const id = model.id.toLowerCase();
             return id.includes('llama-3.3') || id.includes('llama-3.1') || id.includes('llama3');
@@ -43,13 +42,11 @@ async function getActiveLlamaModel() {
             return selectedModel.id;
         }
 
-        // Se nenhum modelo específico for achado pela busca, seleciona o primeiro modelo ativo retornado pela API
         if (response.data && response.data.length > 0) {
             console.log(`[Groq] Modelo ativo dinâmico selecionado: ${response.data[0].id}`);
             return response.data[0].id;
         }
 
-        // Fallback final
         return 'llama-3.3-70b-versatile';
     } catch (error) {
         console.error('[Groq] Erro ao listar modelos:', error);
@@ -99,13 +96,13 @@ const client = new Client({
 });
 
 client.once(Events.ClientReady, (c) => {
-  console.log(`🦉 Atena (${c.user.tag}) está pronta com Quiz Gerado por IA!`);
+  console.log(`📐 Arqui (${c.user.tag}) está pronto com Quiz Gerado por IA!`);
 });
 
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot) return;
 
-  const prefixo = '!atena';
+  const prefixo = '!arqui';
   const foiMencionado = message.mentions.has(client.user);
 
   if (!message.content.toLowerCase().startsWith(prefixo) && !foiMencionado) return;
@@ -115,8 +112,20 @@ client.on(Events.MessageCreate, async (message) => {
 
   let pergunta = message.content.replace(regexPrefixo, '').replace(regexMencao, '').trim();
 
+  // --- MENSAGEM DE BOAS-VINDAS ---
   if (!pergunta) {
-    return message.reply('Olá! Sou a **Atena**, uma IA criada pelo **Crea-GO Jovem**. Como posso te ajudar nos estudos, dúvidas técnicas ou no Quiz da semana?');
+    const mensagemApresentacao = 
+      "**Olá!**\n\n" +
+      "É um prazer conhecer você! Eu sou **Arqui**, uma Inteligência Artificial desenvolvida pelo Crea-GO Jovem. Estou aqui para ajudar e apoiar estudantes, recém-formados e jovens profissionais das áreas de Engenharia, Agronomia e Geociências em Goiás e no Brasil.\n\n" +
+      "**Como posso ajudar você hoje?**\n\n" +
+      "Você tem alguma dúvida ou problema que gostaria de discutir? Estou à disposição para:\n" +
+      "• Explicar conceitos técnicos\n" +
+      "• Auxiliar em cálculos e problemas\n" +
+      "• Discutir sobre normas e regulamentações (como ABNT e resoluções do Confea/Crea)\n" +
+      "• Incentivar a ética, a inovação e o desenvolvimento profissional\n\n" +
+      "**Vamos começar!** Qual é o assunto que você gostaria de abordar?";
+
+    return message.reply(mensagemApresentacao);
   }
 
   const textoLimpo = pergunta.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, '').trim();
@@ -129,7 +138,7 @@ client.on(Events.MessageCreate, async (message) => {
 
   // --- COMPONENTES DO QUIZ DA SEMANA ---
 
-  // 1. INICIAR UMA RODADA DO QUIZ GERADA POR IA: !atena quiz
+  // 1. INICIAR UMA RODADA DO QUIZ GERADA POR IA: !arqui quiz
   if (textoLimpo === 'quiz') {
     try {
       await message.channel.sendTyping();
@@ -158,7 +167,7 @@ client.on(Events.MessageCreate, async (message) => {
 
       const embed = new EmbedBuilder()
         .setColor(0x3498DB)
-        .setTitle('🧠 QUIZ DA ATENA - PERGUNTA INÉDITA')
+        .setTitle('🧠 QUIZ DO ARQUI - PERGUNTA INÉDITA')
         .setDescription(`**${quizItem.pergunta}**\n\n` +
                         `**A)** ${quizItem.opcoes[0]}\n` +
                         `**B)** ${quizItem.opcoes[1]}\n` +
@@ -177,17 +186,17 @@ client.on(Events.MessageCreate, async (message) => {
 
     } catch (err) {
       console.error('Erro ao gerar quiz por IA:', err);
-      return message.reply('Ops! Tive um problema ao gerar a pergunta do quiz. Tente mandar `!atena quiz` novamente!');
+      return message.reply('Ops! Tive um problema ao gerar a pergunta do quiz. Tente mandar `!arqui quiz` novamente!');
     }
   }
 
-  // 2. VER RANKING SEMANAL DE MEMBROS: !atena ranking quiz
+  // 2. VER RANKING SEMANAL DE MEMBROS: !arqui ranking quiz
   if (textoLimpo === 'ranking quiz' || textoLimpo === 'placar quiz') {
     const quizData = carregarQuizMembros();
     const ordenados = Object.entries(quizData).sort((a, b) => b[1].pontos - a[1].pontos);
 
     if (ordenados.length === 0) {
-      return message.reply('Ninguém pontuou no Quiz ainda esta semana! Mande `!atena quiz` para começar.');
+      return message.reply('Ninguém pontuou no Quiz ainda esta semana! Mande `!arqui quiz` para começar.');
     }
 
     const medalias = ['🥇', '🥈', '🥉'];
@@ -198,14 +207,14 @@ client.on(Events.MessageCreate, async (message) => {
 
     const embed = new EmbedBuilder()
       .setColor(0x2ECC71)
-      .setTitle('🏆 RANKING SEMANAL DO QUIZ - ATENA')
+      .setTitle('🏆 RANKING SEMANAL DO QUIZ - ARQUI')
       .setDescription(lista)
-      .setFooter({ text: 'Acumule pontos respondendo perguntas com !atena quiz' });
+      .setFooter({ text: 'Acumule pontos respondendo perguntas com !arqui quiz' });
 
     return message.channel.send({ embeds: [embed] });
   }
 
-  // 3. ZERAR RANKING DO QUIZ NO FINAL DA SEMANA: !atena premiar quiz
+  // 3. ZERAR RANKING DO QUIZ NO FINAL DA SEMANA: !arqui premiar quiz
   if (textoLimpo === 'premiar quiz' || textoLimpo === 'zerar quiz') {
     const quizData = carregarQuizMembros();
     const ordenados = Object.entries(quizData).sort((a, b) => b[1].pontos - a[1].pontos);
@@ -249,7 +258,7 @@ client.on(Events.MessageCreate, async (message) => {
 
     const gtKey = aliases[chaveGT];
     if (!gtKey || isNaN(pontosAdicionar)) {
-      return message.reply('⚠️ Use: `!atena pontuar <GT> <pontos>` (Ex: `!atena pontuar rh 1200`)');
+      return message.reply('⚠️ Use: `!arqui pontuar <GT> <pontos>` (Ex: `!arqui pontuar rh 1200`)');
     }
 
     const placar = carregarPlacarGTs();
@@ -265,7 +274,7 @@ client.on(Events.MessageCreate, async (message) => {
     const activeModel = await getActiveLlamaModel();
 
     const systemInstruction = 
-      "Seu nome é Atena, uma Inteligência Artificial desenvolvida pelo Crea-GO Jovem. " +
+      "Seu nome é Arqui, uma Inteligência Artificial desenvolvida pelo Crea-GO Jovem. " +
       "Seu foco principal é auxiliar estudantes, recém-formados e jovens profissionais das áreas de Engenharia, Agronomia e Geociências em Goiás e no Brasil. " +
       "Responda de forma clara, didática, profissional e acolhedora. " +
       "Responda sempre em português do Brasil.";
@@ -319,7 +328,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     } else {
       await interaction.reply({ 
-        content: `❌ Ops! Resposta incorreta. Digite \`!atena quiz\` para tentar outra pergunta!`, 
+        content: `❌ Ops! Resposta incorreta. Digite \`!arqui quiz\` para tentar outra pergunta!`, 
         ephemeral: true 
       });
     }
