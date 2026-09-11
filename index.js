@@ -32,24 +32,31 @@ async function getActiveLlamaModel() {
     try {
         const response = await groq.models.list();
         
-        // 1. Filtra modelos de texto válidos descartando modelos de áudio/visão e de terceiros
+        // 1. Filtra apenas modelos de CHAT válidos (descarta áudio, visão, terceiros e moderação/guard)
         const validModels = response.data.filter(model => {
             const id = model.id.toLowerCase();
-            const isAudioOrThirdParty = id.includes('whisper') || id.includes('canopylabs') || id.includes('vision');
-            return !isAudioOrThirdParty;
+            const isInvalidType = id.includes('whisper') || 
+                                  id.includes('canopylabs') || 
+                                  id.includes('vision') || 
+                                  id.includes('guard') || 
+                                  id.includes('safeguard');
+            return !isInvalidType;
         });
 
-        // 2. Procura por modelo da família Llama ativo
-        const llamaModel = validModels.find(model => model.id.toLowerCase().includes('llama'));
+        // 2. Busca por modelos Llama 3.3, 3.1 ou Llama 3 ativos
+        const llamaModel = validModels.find(model => {
+            const id = model.id.toLowerCase();
+            return id.includes('llama-3.3') || id.includes('llama-3.1') || id.includes('llama3');
+        });
 
         if (llamaModel) {
-            console.log(`[Groq] Modelo Llama selecionado: ${llamaModel.id}`);
+            console.log(`[Groq] Modelo de chat selecionado: ${llamaModel.id}`);
             return llamaModel.id;
         }
 
-        // 3. Usa o primeiro modelo de texto disponível se nenhum Llama direto for achado
+        // 3. Fallback: usa o primeiro modelo de chat disponível da lista
         if (validModels.length > 0) {
-            console.log(`[Groq] Usando primeiro modelo disponível: ${validModels[0].id}`);
+            console.log(`[Groq] Usando modelo de chat alternativo: ${validModels[0].id}`);
             return validModels[0].id;
         }
 
