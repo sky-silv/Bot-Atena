@@ -32,9 +32,13 @@ async function getActiveLlamaModel() {
     try {
         const response = await groq.models.list();
         
+        // Filtra estritamente por modelos Llama oficiais
+        // Ignora modelos de terceiros (ex: canopylabs, whisper) que exigem aceite de termos
         const selectedModel = response.data.find(model => {
             const id = model.id.toLowerCase();
-            return id.includes('llama-3.3') || id.includes('llama-3.1') || id.includes('llama3');
+            const isLlama = id.includes('llama-3.3') || id.includes('llama-3.1') || id.includes('llama3');
+            const isThirdParty = id.includes('canopylabs') || id.includes('whisper');
+            return isLlama && !isThirdParty;
         });
 
         if (selectedModel) {
@@ -42,11 +46,7 @@ async function getActiveLlamaModel() {
             return selectedModel.id;
         }
 
-        if (response.data && response.data.length > 0) {
-            console.log(`[Groq] Modelo ativo dinâmico selecionado: ${response.data[0].id}`);
-            return response.data[0].id;
-        }
-
+        // Fallback padrão seguro
         return 'llama-3.3-70b-versatile';
     } catch (error) {
         console.error('[Groq] Erro ao listar modelos:', error);
