@@ -32,24 +32,30 @@ async function getActiveLlamaModel() {
     try {
         const response = await groq.models.list();
         
-        // Filtra estritamente por modelos Llama oficiais
-        // Ignora modelos de terceiros (ex: canopylabs, whisper) que exigem aceite de termos
-        const selectedModel = response.data.find(model => {
+        // 1. Filtra modelos de texto válidos descartando modelos de áudio/visão e de terceiros
+        const validModels = response.data.filter(model => {
             const id = model.id.toLowerCase();
-            const isLlama = id.includes('llama-3.3') || id.includes('llama-3.1') || id.includes('llama3');
-            const isThirdParty = id.includes('canopylabs') || id.includes('whisper');
-            return isLlama && !isThirdParty;
+            const isAudioOrThirdParty = id.includes('whisper') || id.includes('canopylabs') || id.includes('vision');
+            return !isAudioOrThirdParty;
         });
 
-        if (selectedModel) {
-            console.log(`[Groq] Modelo selecionado dinamicamente: ${selectedModel.id}`);
-            return selectedModel.id;
+        // 2. Procura por modelo da família Llama ativo
+        const llamaModel = validModels.find(model => model.id.toLowerCase().includes('llama'));
+
+        if (llamaModel) {
+            console.log(`[Groq] Modelo Llama selecionado: ${llamaModel.id}`);
+            return llamaModel.id;
         }
 
-        // Fallback padrão seguro
+        // 3. Usa o primeiro modelo de texto disponível se nenhum Llama direto for achado
+        if (validModels.length > 0) {
+            console.log(`[Groq] Usando primeiro modelo disponível: ${validModels[0].id}`);
+            return validModels[0].id;
+        }
+
         return 'llama-3.3-70b-versatile';
     } catch (error) {
-        console.error('[Groq] Erro ao listar modelos:', error);
+        console.error('[Groq] Erro ao listar modelos dinamicamente:', error);
         return 'llama-3.3-70b-versatile';
     }
 }
@@ -145,8 +151,10 @@ client.on(Events.MessageCreate, async (message) => {
 
       const activeModel = await getActiveLlamaModel();
 
+      // PROMPT AJUSTADO PARA PERGUNTAS FÁCEIS E ACESSÍVEIS
       const promptQuiz = 
-        'Gere uma pergunta de múltipla escolha inédita sobre Engenharia, Agronomia, Geociências, ABNT, legislação do Confea/Crea ou física/matemática básica. ' +
+        'Gere uma pergunta de múltipla escolha FÁCIL e divertida, de nível básico ou conhecimentos gerais para estudantes de Engenharia, Agronomia ou Geociências. ' +
+        'Evite cálculos complexos ou termos extremamente específicos. Foque em conceitos do dia a dia, curiosidades ou fundamentos básicos. ' +
         'Retorne ESTRITAMENTE um JSON no seguinte formato, sem formatação markdown ou texto adicional:\n' +
         '{\n' +
         '  "pergunta": "Texto da pergunta aqui",\n' +
@@ -158,7 +166,7 @@ client.on(Events.MessageCreate, async (message) => {
       const completion = await groq.chat.completions.create({
         messages: [{ role: 'user', content: promptQuiz }],
         model: activeModel,
-        temperature: 0.8,
+        temperature: 0.7,
       });
 
       const rawContent = completion.choices[0]?.message?.content || '';
@@ -167,7 +175,7 @@ client.on(Events.MessageCreate, async (message) => {
 
       const embed = new EmbedBuilder()
         .setColor(0x3498DB)
-        .setTitle('🧠 QUIZ DO ARQUI - PERGUNTA INÉDITA')
+        .setTitle('🧠 QUIZ DO ARQUI - PERGUNTA DA SEMANA')
         .setDescription(`**${quizItem.pergunta}**\n\n` +
                         `**A)** ${quizItem.opcoes[0]}\n` +
                         `**B)** ${quizItem.opcoes[1]}\n` +
