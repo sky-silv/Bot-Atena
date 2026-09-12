@@ -27,45 +27,13 @@ app.listen(PORT, () => {
     console.log(`Servidor HTTP do Render rodando na porta ${PORT}`);
 });
 
-// --- FUNÇÃO DE SELEÇÃO DINÂMICA DE MODELO GROQ ---
-async function getActiveLlamaModel() {
-    try {
-        const response = await groq.models.list();
-        
-        // 1. Filtra apenas modelos de CHAT válidos (descarta áudio, visão, terceiros e moderação/guard)
-        const validModels = response.data.filter(model => {
-            const id = model.id.toLowerCase();
-            const isInvalidType = id.includes('whisper') || 
-                                  id.includes('canopylabs') || 
-                                  id.includes('vision') || 
-                                  id.includes('guard') || 
-                                  id.includes('safeguard');
-            return !isInvalidType;
-        });
-
-        // 2. Busca por modelos Llama 3.3, 3.1 ou Llama 3 ativos
-        const llamaModel = validModels.find(model => {
-            const id = model.id.toLowerCase();
-            return id.includes('llama-3.3') || id.includes('llama-3.1') || id.includes('llama3');
-        });
-
-        if (llamaModel) {
-            console.log(`[Groq] Modelo de chat selecionado: ${llamaModel.id}`);
-            return llamaModel.id;
-        }
-
-        // 3. Fallback: usa o primeiro modelo de chat disponível da lista
-        if (validModels.length > 0) {
-            console.log(`[Groq] Usando modelo de chat alternativo: ${validModels[0].id}`);
-            return validModels[0].id;
-        }
-
-        return 'llama-3.3-70b-versatile';
-    } catch (error) {
-        console.error('[Groq] Erro ao listar modelos dinamicamente:', error);
-        return 'llama-3.3-70b-versatile';
-    }
-}
+// Lista prioritária de modelos oficiais de CHAT da Groq (sem chamadas pesadas de API)
+const PREFERRED_MODELS = [
+    'llama-3.3-70b-versatile',
+    'llama-3.1-8b-instant',
+    'llama3-70b-8192',
+    'llama3-8b-8192'
+];
 
 // Arquivos de banco de dados locais
 const CAMINHO_PLACAR_GTS = path.join(__dirname, 'placar.json');
@@ -156,9 +124,6 @@ client.on(Events.MessageCreate, async (message) => {
     try {
       await message.channel.sendTyping();
 
-      const activeModel = await getActiveLlamaModel();
-
-      // PROMPT AJUSTADO PARA PERGUNTAS FÁCEIS E ACESSÍVEIS
       const promptQuiz = 
         'Gere uma pergunta de múltipla escolha FÁCIL e divertida, de nível básico ou conhecimentos gerais para estudantes de Engenharia, Agronomia ou Geociências. ' +
         'Evite cálculos complexos ou termos extremamente específicos. Foque em conceitos do dia a dia, curiosidades ou fundamentos básicos. ' +
@@ -170,11 +135,26 @@ client.on(Events.MessageCreate, async (message) => {
         '}\n' +
         'O campo "correta" deve ser o número do índice correto (0 para a primeira opção, 1 para a segunda, etc).';
 
-      const completion = await groq.chat.completions.create({
-        messages: [{ role: 'user', content: promptQuiz }],
-        model: activeModel,
-        temperature: 0.7,
-      });
+      let completion = null;
+      let lastError = null;
+
+      // Percorre os modelos prioritários caso um falhe
+      for (const modelId of PREFERRED_MODELS) {
+        try {
+          completion = await groq.chat.completions.create({
+            messages: [{ role: 'user', content: promptQuiz }],
+            model: modelId,
+            temperature: 0.7,
+            max_tokens: 800,
+          });
+          if (completion) break;
+        } catch (err) {
+          console.warn(`[Groq Quiz] Falha no modelo ${modelId}. Tentando o próximo...`);
+          lastError = err;
+        }
+      }
+
+      if (!completion) throw lastError;
 
       const rawContent = completion.choices[0]?.message?.content || '';
       const jsonString = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -286,22 +266,35 @@ client.on(Events.MessageCreate, async (message) => {
   try {
     await message.channel.sendTyping();
 
-    const activeModel = await getActiveLlamaModel();
-
     const systemInstruction = 
       "Seu nome é Arqui, uma Inteligência Artificial desenvolvida pelo Crea-GO Jovem. " +
       "Seu foco principal é auxiliar estudantes, recém-formados e jovens profissionais das áreas de Engenharia, Agronomia e Geociências em Goiás e no Brasil. " +
       "Responda de forma clara, didática, profissional e acolhedora. " +
       "Responda sempre em português do Brasil.";
 
-    const completion = await groq.chat.completions.create({
-      messages: [
-        { role: 'system', content: systemInstruction },
-        { role: 'user', content: pergunta },
-      ],
-      model: activeModel,
-      temperature: 0.7,
-    });
+    let completion = null;
+    let lastError = null;
+
+    // Tenta os modelos Llama em ordem até um responder
+    for (const modelId of PREFERRED_MODELS) {
+      try {
+        completion = await groq.chat.completions.create({
+          messages: [
+            { role: 'system', content: systemInstruction },
+            { role: 'user', content: pergunta },
+          ],
+          model: modelId,
+          temperature: 0.7,
+          max_tokens: 800,
+        });
+        if (completion) break;
+      } catch (err) {
+        console.warn(`[Groq Chat] Falha no modelo ${modelId}. Tentando próximo...`);
+        lastError = err;
+      }
+    }
+
+    if (!completion) throw lastError;
 
     const respostaTexto = completion.choices[0]?.message?.content || 'Não consegui gerar uma resposta no momento.';
 
