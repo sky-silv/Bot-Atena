@@ -27,12 +27,10 @@ app.listen(PORT, () => {
     console.log(`Servidor HTTP do Render rodando na porta ${PORT}`);
 });
 
-// Lista prioritária de modelos oficiais de CHAT da Groq (sem chamadas pesadas de API)
+// Lista de modelos ATIVOS e atualizados na Groq (Llama 3.3 e 3.1)
 const PREFERRED_MODELS = [
     'llama-3.3-70b-versatile',
-    'llama-3.1-8b-instant',
-    'llama3-70b-8192',
-    'llama3-8b-8192'
+    'llama-3.1-8b-instant'
 ];
 
 // Arquivos de banco de dados locais
@@ -138,18 +136,17 @@ client.on(Events.MessageCreate, async (message) => {
       let completion = null;
       let lastError = null;
 
-      // Percorre os modelos prioritários caso um falhe
       for (const modelId of PREFERRED_MODELS) {
         try {
           completion = await groq.chat.completions.create({
             messages: [{ role: 'user', content: promptQuiz }],
             model: modelId,
             temperature: 0.7,
-            max_tokens: 800,
+            max_tokens: 500,
           });
           if (completion) break;
         } catch (err) {
-          console.warn(`[Groq Quiz] Falha no modelo ${modelId}. Tentando o próximo...`);
+          console.warn(`[Groq Quiz] Falha no modelo ${modelId}. Tentando próximo...`);
           lastError = err;
         }
       }
@@ -275,7 +272,6 @@ client.on(Events.MessageCreate, async (message) => {
     let completion = null;
     let lastError = null;
 
-    // Tenta os modelos Llama em ordem até um responder
     for (const modelId of PREFERRED_MODELS) {
       try {
         completion = await groq.chat.completions.create({
