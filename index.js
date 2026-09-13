@@ -8,12 +8,14 @@ const {
   ButtonBuilder, 
   ButtonStyle 
 } = require('discord.js');
-const Groq = require('groq-sdk');
+const { GoogleGenAI } = require('@google/genai');
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+// Inicialização oficial do Google Gemini SDK
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const MODEL_NAME = 'gemini-2.5-flash';
 
 // --- SERVIDOR EXPRESS PARA MANTER O RENDER ON ---
 const app = express();
@@ -26,46 +28,6 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
     console.log(`Servidor HTTP do Render rodando na porta ${PORT}`);
 });
-
-// --- FUNÇÃO DE SELEÇÃO DINÂMICA DE MODELO GROQ ---
-async function getActiveLlamaModel() {
-    try {
-        const response = await groq.models.list();
-        
-        // 1. Filtra apenas modelos de CHAT válidos (descarta áudio, visão, terceiros e moderação/guard)
-        const validModels = response.data.filter(model => {
-            const id = model.id.toLowerCase();
-            const isInvalidType = id.includes('whisper') || 
-                                  id.includes('canopylabs') || 
-                                  id.includes('vision') || 
-                                  id.includes('guard') || 
-                                  id.includes('safeguard');
-            return !isInvalidType;
-        });
-
-        // 2. Busca por modelos Llama 3.3, 3.1 ou Llama 3 ativos
-        const llamaModel = validModels.find(model => {
-            const id = model.id.toLowerCase();
-            return id.includes('llama-3.3') || id.includes('llama-3.1') || id.includes('llama3');
-        });
-
-        if (llamaModel) {
-            console.log(`[Groq] Modelo de chat selecionado: ${llamaModel.id}`);
-            return llamaModel.id;
-        }
-
-        // 3. Fallback: usa o primeiro modelo de chat disponível da lista
-        if (validModels.length > 0) {
-            console.log(`[Groq] Usando modelo de chat alternativo: ${validModels[0].id}`);
-            return validModels[0].id;
-        }
-
-        return 'llama-3.3-70b-versatile';
-    } catch (error) {
-        console.error('[Groq] Erro ao listar modelos dinamicamente:', error);
-        return 'llama-3.3-70b-versatile';
-    }
-}
 
 // Arquivos de banco de dados locais
 const CAMINHO_PLACAR_GTS = path.join(__dirname, 'placar.json');
@@ -109,7 +71,7 @@ const client = new Client({
 });
 
 client.once(Events.ClientReady, (c) => {
-  console.log(`📐 Arqui (${c.user.tag}) está pronto com Quiz Gerado por IA!`);
+  console.log(`📐 Arqui (${c.user.tag}) está pronto operando com Google Gemini!`);
 });
 
 client.on(Events.MessageCreate, async (message) => {
@@ -156,29 +118,28 @@ client.on(Events.MessageCreate, async (message) => {
     try {
       await message.channel.sendTyping();
 
-      const activeModel = await getActiveLlamaModel();
-
-      // PROMPT AJUSTADO PARA PERGUNTAS FÁCEIS E ACESSÍVEIS
       const promptQuiz = 
         'Gere uma pergunta de múltipla escolha FÁCIL e divertida, de nível básico ou conhecimentos gerais para estudantes de Engenharia, Agronomia ou Geociências. ' +
         'Evite cálculos complexos ou termos extremamente específicos. Foque em conceitos do dia a dia, curiosidades ou fundamentos básicos. ' +
-        'Retorne ESTRITAMENTE um JSON no seguinte formato, sem formatação markdown ou texto adicional:\n' +
+        'Retorne ESTRITAMENTE um JSON no seguinte formato, sem formatação markdown extra ou introduções:\n' +
         '{\n' +
         '  "pergunta": "Texto da pergunta aqui",\n' +
         '  "opcoes": ["Opção 0", "Opção 1", "Opção 2", "Opção 3"],\n' +
         '  "correta": 0\n' +
         '}\n' +
-        'O campo "correta" deve ser o número do índice correto (0 para a primeira opção, 1 para a segunda, etc).';
+        'O campo "correta" deve ser o índice numérico exato da resposta certa (0, 1, 2 ou 3).';
 
-      const completion = await groq.chat.completions.create({
-        messages: [{ role: 'user', content: promptQuiz }],
-        model: activeModel,
-        temperature: 0.7,
+      const response = await ai.models.generateContent({
+        model: MODEL_NAME,
+        contents: promptQuiz,
+        config: {
+          responseMimeType: 'application/json',
+          temperature: 0.7,
+        }
       });
 
-      const rawContent = completion.choices[0]?.message?.content || '';
-      const jsonString = rawContent.replace(/```json/g, '').replace(/```/g, '').trim();
-      const quizItem = JSON.parse(jsonString);
+      const rawContent = response.text || '';
+      const quizItem = JSON.parse(rawContent);
 
       const embed = new EmbedBuilder()
         .setColor(0x3498DB)
@@ -200,7 +161,7 @@ client.on(Events.MessageCreate, async (message) => {
       return message.channel.send({ embeds: [embed], components: [row] });
 
     } catch (err) {
-      console.error('Erro ao gerar quiz por IA:', err);
+      console.error('Erro ao gerar quiz por IA (Gemini):', err);
       return message.reply('Ops! Tive um problema ao gerar a pergunta do quiz. Tente mandar `!arqui quiz` novamente!');
     }
   }
@@ -282,11 +243,9 @@ client.on(Events.MessageCreate, async (message) => {
     return message.reply(`✅ **+${pontosAdicionar} pontos** para o **${placar[gtKey].nome}**! Total: **${placar[gtKey].pontos} pts**.`);
   }
 
-  // --- CHAMADA IA CONVERSACIONAL DO GROQ ---
+  // --- CHAMADA IA CONVERSACIONAL DO GOOGLE GEMINI ---
   try {
     await message.channel.sendTyping();
-
-    const activeModel = await getActiveLlamaModel();
 
     const systemInstruction = 
       "Seu nome é Arqui, uma Inteligência Artificial desenvolvida pelo Crea-GO Jovem. " +
@@ -294,16 +253,16 @@ client.on(Events.MessageCreate, async (message) => {
       "Responda de forma clara, didática, profissional e acolhedora. " +
       "Responda sempre em português do Brasil.";
 
-    const completion = await groq.chat.completions.create({
-      messages: [
-        { role: 'system', content: systemInstruction },
-        { role: 'user', content: pergunta },
-      ],
-      model: activeModel,
-      temperature: 0.7,
+    const response = await ai.models.generateContent({
+      model: MODEL_NAME,
+      contents: pergunta,
+      config: {
+        systemInstruction: systemInstruction,
+        temperature: 0.7,
+      }
     });
 
-    const respostaTexto = completion.choices[0]?.message?.content || 'Não consegui gerar uma resposta no momento.';
+    const respostaTexto = response.text || 'Não consegui gerar uma resposta no momento.';
 
     if (respostaTexto.length > 2000) {
       const partes = respostaTexto.match(/[\s\S]{1,1900}/g) || [];
@@ -313,7 +272,7 @@ client.on(Events.MessageCreate, async (message) => {
     }
 
   } catch (error) {
-    console.error('⚠️ Erro na resposta:', error);
+    console.error('⚠️ Erro na resposta do Gemini:', error);
     message.reply('Ops! Tive um problema ao processar sua dúvida.');
   }
 });
